@@ -1,0 +1,49 @@
+{
+  "strict": {
+    "text-font-family": "PoppinsRegular",
+
+    "text-heading-1-font-size": 36,
+    "text-heading-1-font-weight": "800",
+    "text-heading-1-font-family": "PoppinsBold",
+
+    "text-heading-2-font-size": 32,
+    "text-heading-2-font-weight": "800",
+    "text-heading-2-font-family": "PoppinsBold",
+
+    "text-heading-3-font-size": 28,
+    "text-heading-3-font-weight": "800",
+    "text-heading-3-font-family": "PoppinsBold",
+
+    "text-heading-4-font-size": 24,
+    "text-heading-4-font-weight": "800",
+    "text-heading-4-font-family": "PoppinsBold",
+
+    "text-heading-5-font-size": 20,
+    "text-heading-5-font-weight": "800",
+    "text-heading-5-font-family": "PoppinsBold",
+
+    "text-heading-6-font-size": 16,
+    "text-heading-6-font-weight": "800",
+    "text-heading-6-font-family": "PoppinsBold",
+
+    "text-subtitle-1-font-size": 15,
+    "text-subtitle-1-font-weight": "600",
+    "text-subtitle-1-font-family": "PoppinsSemiBold",
+
+    "text-paragraph-1-font-size": 15,
+    "text-paragraph-1-font-weight": "400",
+    "text-paragraph-1-font-family": "PoppinsRegular",
+
+    "text-caption-1-font-size": 14,
+    "text-caption-1-font-weight": "400",
+    "text-caption-1-font-family": "PoppinsRegular",
+
+    "text-caption-2-font-size": 12,
+    "text-caption-2-font-weight": "400",
+    "text-caption-2-font-family": "PoppinsRegular",
+
+    "text-label-font-size": 12,
+    "text-label-font-weight": "500",
+    "text-label-font-family": "PoppinsRegular"
+  }
+}
