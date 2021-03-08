@@ -7,58 +7,79 @@ import {
   Text,
   Button,
   Card,
-  Avatar,
 } from "@ui-kitten/components";
-import { SafeAreaView } from "react-native-safe-area-context";
 import * as firebase from "firebase";
 import "firebase/firestore";
 import { AuthContext } from "../src/AuthProvider";
 import { GlobalContext } from "../src/GlobalProvider";
 import Loading from "../components/Loading";
+import ProfileAvatar from "../components/Avatar";
 
 const AddIcon = (props) => <Icon {...props} name="plus-circle" />;
 const BackIcon = (props) => <Icon {...props} name="arrow-back-outline" />;
 export default function UsersScreen({ navigation }) {
-  const { user } = useContext(AuthContext);
-  const { getUsername } = useContext(GlobalContext);
-  const [username, setUsername] = useState("");
-  const [threads, setThreads] = useState([]);
+  const { showAlert, ListLimit } = useContext(GlobalContext);
+  const { user, username } = useContext(AuthContext);
+  const [Users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [
+    onEndReachedCalledDuringMomentum,
+    setonEndReachedCalledDuringMomentum,
+  ] = useState(true);
 
-  useEffect(() => {
-    async function userName() {
-      const getuser = await getUsername();
-      setUsername(getuser.toString());
-    }
-    userName();
-    return () => userName();
-  }, []);
+  const LoadMoreGroups = () => {
+    const lastVisible = Users[Users.length - 1];
 
-  useEffect(() => {
-    const unsubscribe = firebase
+    firebase
       .firestore()
       .collection("USERS")
-      .onSnapshot((querySnapshot) => {
-        const users = querySnapshot.docs.map((documentSnapshot) => {
-          return {
-            _id: documentSnapshot.id,
-            // give defaults
-            name: "",
-            ...documentSnapshot.data(),
-          };
+      .orderBy("createdAt", "desc")
+      .startAfter(lastVisible.createdAt)
+      .limit(ListLimit)
+      .get()
+      .then((docRef) => {
+        const users = docRef.docs.map((doc) => {
+          const firebaseData = doc.data();
+          return firebaseData;
         });
 
-        setThreads(users);
-
-        if (loading) {
-          setLoading(false);
+        //check the initial data is not yet in the array
+        if (!users.every((val) => Users.includes(val))) {
+          //add only if initial data not in group array
+          setUsers(Users.concat(users));
         }
       });
+  };
+  const onEndReached = () => {
+    if (!onEndReachedCalledDuringMomentum) {
+      //Load More Groups
+      LoadMoreGroups();
+      setonEndReachedCalledDuringMomentum(true);
+    }
+  };
 
-    /**
-     * unsubscribe listener
-     */
-    return () => unsubscribe();
+  useEffect(() => {
+    const loadUsers = () => {
+      firebase
+        .firestore()
+        .collection("USERS")
+        .limit(ListLimit)
+        .orderBy("createdAt", "desc")
+        .get()
+        .then((docRef) => {
+          const users = docRef.docs.map((doc) => {
+            const firebaseData = doc.data();
+            return firebaseData;
+          });
+
+          setUsers(users);
+
+          if (loading) {
+            setLoading(false);
+          }
+        });
+    };
+    loadUsers();
   }, []);
 
   if (loading) {
@@ -68,63 +89,71 @@ export default function UsersScreen({ navigation }) {
   // ...rest of the component
 
   return (
-    <ScrollView showsHorizontalScrollIndicator={false} decelerationRate="fast">
-      {threads.map((item, key) => {
-        return (
-          <Layout
-            style={{
-              backgroundColor: "transparent",
-            }}
-          >
-            {item.username !== username ? (
-              <Layout
+    <FlatList
+      data={Users}
+      renderItem={({ item, index, key }) => (
+        <Layout
+          style={{
+            backgroundColor: "transparent",
+          }}
+        >
+          {item.username !== username ? (
+            <Layout
+              style={{
+                backgroundColor: "transparent",
+              }}
+            >
+              <Card
                 style={{
-                  backgroundColor: "transparent",
+                  marginVertical: 5,
+                  borderWidth: 0,
+                  flexDirection: "row",
+                }}
+                onPress={() => {
+                  navigation.navigate("Chat", { userinfo: item });
                 }}
               >
-                <Card
+                <Layout
                   style={{
-                    marginVertical: 5,
-                    borderWidth: 0,
                     flexDirection: "row",
+                    justifyContent: "center",
+                    backgroundColor: "transparent",
                   }}
-                  onPress={() =>
-                    navigation.navigate("Chat", { userinfo: item })
-                  }
                 >
+                  <ProfileAvatar name={item.username} />
                   <Layout
                     style={{
-                      flexDirection: "row",
-                      justifyContent: "center",
+                      flexDirection: "column",
+                      marginLeft: 13,
                       backgroundColor: "transparent",
+                      marginTop: 10,
                     }}
                   >
-                    <Avatar
-                      size="large"
-                      source={require("../assets/img/default.png")}
-                    />
-                    <Layout
-                      style={{
-                        flexDirection: "column",
-                        marginLeft: 13,
-                        backgroundColor: "transparent",
-                        marginTop: 5,
-                      }}
-                    >
-                      <Text category="s1">{item.username}</Text>
-                      <Text category="s2" style={{ fontSize: 15 }}>
-                        0 Mutual Friends
-                      </Text>
-                    </Layout>
+                    <Text category="s1">
+                      {item.username.charAt(0).toUpperCase() +
+                        item.username.slice(1)}
+                    </Text>
+                    <Text category="s2" style={{ fontSize: 15 }}>
+                      0 Mutual Links
+                    </Text>
                   </Layout>
-                </Card>
-              </Layout>
-            ) : null}
-            <Divider />
-          </Layout>
-        );
-      })}
-    </ScrollView>
+                </Layout>
+              </Card>
+            </Layout>
+          ) : null}
+          <Divider />
+        </Layout>
+      )}
+      //Setting the number of column
+      numColumns={1}
+      keyExtractor={(item, index) => index.toString()}
+      initialNumToRender={ListLimit}
+      onEndReachedThreshold={0.1}
+      onMomentumScrollBegin={() => {
+        setonEndReachedCalledDuringMomentum(false);
+      }}
+      onEndReached={onEndReached.bind(this)}
+    />
   );
 }
 
@@ -160,7 +189,7 @@ const styles = StyleSheet.create({
 // import React from "react";
 // import { View, StyleSheet } from "react-native";
 // import { Layout, Text, Icon, Button } from "@ui-kitten/components";
-// const MenuScreen = ({ navigation }) => {
+// const MainScreen = ({ navigation }) => {
 //   return (
 //     <Layout style={styles.container}>
 //       {/* <Title>All chat rooms will be listed here</Title> */}
@@ -179,4 +208,4 @@ const styles = StyleSheet.create({
 //   },
 // });
 
-// export default MenuScreen;
+// export default MainScreen;

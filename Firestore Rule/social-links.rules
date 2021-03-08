@@ -1,0 +1,211 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {   
+
+    function userIsAuthenticated() {
+    return request.auth.uid != null;
+      }
+
+     function UserDataExists(id) {
+     return exists(/databases/$(database)/documents/USERS/$(id));
+      }
+     function getUsername(id) {
+     return get(/databases/$(database)/documents/USERS/$(id)).data.username
+     }
+
+      match /USERS/{userId} {
+       allow get: if userIsAuthenticated();
+       allow list: if userIsAuthenticated() && request.query.limit <= 25;
+      
+      allow create: if userIsAuthenticated()
+            && request.auth.uid == userId
+            && request.resource.data.userid ==  request.auth.uid
+            && request.resource.data.email == request.auth.token.email
+            && request.resource.data.username.size() <= 15
+            && request.resource.data.username.matches('^[a-zA-Z0-9_]{3,}[a-zA-Z]+[0-9]*$') 
+            && request.resource.data.username == request.resource.data.username.lower()
+            && !exists(/databases/$(database)/documents/USERNAMES/$(request.resource.data.username))
+            && resource == null
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.keys().hasOnly(['email', 'username', 'userid', 'createdAt'])
+            && request.resource.data.size() == 4
+            && getAfter(/databases/$(database)/documents/USERNAMES/$(request.resource.data.username))
+            .data.username == request.resource.data.username
+            && getAfter(/databases/$(database)/documents/USERNAMES/$(request.resource.data.username))
+            .data.createdAt == request.time;
+            }
+ 
+
+      match /USERNAMES/{username} {
+      allow get: if true;
+      allow list: if false;
+    
+    allow write: if userIsAuthenticated()
+    && request.resource.data.username == username
+    && request.resource.data.keys().hasOnly(['username', 'createdAt'])
+    && request.resource.data.size() == 2
+    && getAfter(/databases/$(database)/documents/USERS/$(request.auth.uid))
+     .data.username == request.resource.data.username
+    && getAfter(/databases/$(database)/documents/USERS/$(request.auth.uid))
+     .data.createdAt == request.time
+     }
+      
+     match /CHATS/{chat} {
+       allow read: if userIsAuthenticated()
+        && resource != null
+        && request.auth.uid in resource.data.participants
+        && request.query.limit <= 25;
+         
+     allow write: if userIsAuthenticated()
+     && ((request.resource.data.participants[0] > request.resource.data.participants[1] 
+     && chat == request.resource.data.participants[1] + request.resource.data.participants[0])
+     || (request.resource.data.participants[0] < request.resource.data.participants[1]
+     && chat == request.resource.data.participants[0] + request.resource.data.participants[1]))
+     && UserDataExists(request.resource.data.participants[0])
+     && UserDataExists(request.resource.data.participants[1])
+     && request.auth.uid in request.resource.data.participants
+     && request.resource.data.participants[0] < request.resource.data.participants[1]
+     && request.resource.data.keys().hasOnly(['participants', 'latestMessage'])
+     && request.resource.data.size() == 2
+     && request.resource.data.participants.size() == 2
+     && request.resource.data.latestMessage.keys().hasOnly(['id','users', 'text', 'createdAt'])
+     && request.resource.data.latestMessage.size() == 4
+     && request.resource.data.latestMessage.id.size() != 0
+     && (get(/databases/$(database)/documents/USERS/$(request.resource.data.participants[0])).data.username
+     in request.resource.data.latestMessage.users && get(/databases/$(database)/documents/USERS/$(request.resource.data.participants[1])).data.username
+     in request.resource.data.latestMessage.users)
+     && request.resource.data.latestMessage.users.size() == 2
+     && request.resource.data.latestMessage.text is string
+     && (request.resource.data.latestMessage.text.size() != 0
+     && request.resource.data.latestMessage.text.size() <= 35)
+     && request.time == request.resource.data.latestMessage.createdAt
+     && (getAfter(/databases/$(database)/documents/CHATS/$(chat)/MESSAGES/$(request.resource.data.latestMessage.id))
+     .data.createdAt == request.time
+     && getAfter(/databases/$(database)/documents/CHATS/$(chat)/MESSAGES/$(request.resource.data.latestMessage.id))
+     .data.user.username in request.resource.data.latestMessage.users
+     && ((getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text.size() > 35 && getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text[0:35] == request.resource.data.latestMessage.text)
+        ||(getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text.size() <= 35 && getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text == request.resource.data.latestMessage.text))
+        ||(request.resource.data.latestMessage.id == "deleted_message" 
+        &&  request.resource.data.latestMessage.text == resource.data.latestMessage.text
+        &&  request.resource.data.latestMessage.users == resource.data.latestMessage.users
+       ))
+     
+      
+      match /MESSAGES/{message} {
+
+       function chatDataAfter() {
+            return getAfter(/databases/$(database)/documents/CHATS/$(chat)).data
+          }
+            function chatData() {
+            return get(/databases/$(database)/documents/CHATS/$(chat)).data
+          }
+
+           function chatDataExist() {
+            return exists(/databases/$(database)/documents/CHATS/$(chat))
+          }
+          
+        allow get: if userIsAuthenticated()
+       && request.auth.uid in chatData().participants
+       allow list: if userIsAuthenticated()
+       && request.query.limit <= 50
+       && ((request.auth.uid in chatData().participants) || (!chatDataExist()));
+
+       allow write: if userIsAuthenticated()
+       && getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)).data.latestMessage.id == message
+       && request.auth.uid in chatDataAfter().participants
+       && request.resource.data.createdAt == request.time
+       && request.resource.data.text is string
+       && request.resource.data.text.size() > 0
+       && request.resource.data.user.keys().hasOnly(['_id', 'username'])
+       && request.resource.data.user.size() == 2
+       && request.resource.data.user._id == request.auth.uid
+       && request.resource.data.user.username == get(/databases/$(database)/documents/USERS/$(request.auth.uid)).data.username
+        
+       allow delete: if userIsAuthenticated()
+        && request.auth.uid == resource.data.user._id
+        && getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)).data.latestMessage.createdAt == request.time
+        && getAfter(
+          /databases/$(database)/documents/CHATS/$(chat)).data.latestMessage.id == "deleted_message";
+       }
+     }
+
+    match /GROUPS/{group} {
+      allow get: if userIsAuthenticated();
+      allow list: if userIsAuthenticated() && request.query.limit <= 25;
+      
+      allow write: if userIsAuthenticated()
+      && request.resource.data.keys().hasOnly(['name', 'createdBy', 'createdAt', 'latestMessage'])
+      && request.resource.data.size() == 4
+      && request.resource.data.latestMessage.size() == 0
+      && (request.resource.data.name.size() >= 3 && request.resource.data.name.size() <= 25)
+      && request.resource.data.name is string
+      && request.resource.data.createdBy ==  getUsername(request.auth.uid)
+      && request.resource.data.createdAt == request.time
+       
+       allow update: if request.auth != null
+       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['latestMessage'])
+       && request.resource.data.latestMessage.keys().hasAll(['id','text','createdAt', 'username'])
+       && request.resource.data.latestMessage.size() == 4
+       && request.resource.data.latestMessage.id.size() != 0
+       && (request.resource.data.latestMessage.text.size() > 0
+       && request.resource.data.latestMessage.text.size() <= 35)  
+       && request.resource.data.latestMessage.text is string
+       && request.resource.data.latestMessage.createdAt == request.time
+       && request.resource.data.latestMessage.username == get(/databases/$(database)/documents/USERS/$(request.auth.uid)).data.username
+       && getAfter(/databases/$(database)/documents/GROUPS/$(group)/MESSAGES/$(request.resource.data.latestMessage.id))
+      .data.createdAt == request.time
+       && getAfter(/databases/$(database)/documents/GROUPS/$(group)/MESSAGES/$(request.resource.data.latestMessage.id))
+     .data.user.username == request.resource.data.latestMessage.username
+         && ((getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text.size() > 35 && getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text[0:35] == request.resource.data.latestMessage.text)
+        ||(getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text.size() <= 35 && getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)/MESSAGES/$(request.resource.data.latestMessage.id)
+        ).data.text == request.resource.data.latestMessage.text))
+       
+       
+       match /MESSAGES/{message} {
+      allow read: if userIsAuthenticated()
+       && request.query.limit <= 50;
+      
+      allow write: if userIsAuthenticated()
+      && (getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)
+        ).data.latestMessage.createdAt == request.time)
+        && ((request.resource.data.text.size() > 35 && getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)
+        ).data.latestMessage.text == request.resource.data.text[0:35])
+        ||(request.resource.data.text.size() <= 35 && getAfter(
+          /databases/$(database)/documents/GROUPS/$(group)
+        ).data.latestMessage.text == request.resource.data.text))
+       && request.resource.data.keys().hasOnly(['text','createdAt', 'user'])
+       && request.resource.data.size() == 3
+       && request.resource.data.text.size() >= 1
+       && request.resource.data.text is string
+       && request.resource.data.createdAt == request.time
+       && request.resource.data.user.keys().hasOnly(['_id','username', 'email'])
+       && request.resource.data.user.size() == 3
+       && request.resource.data.user._id == request.auth.uid
+       && request.resource.data.user.username == getUsername(request.auth.uid)
+       && request.resource.data.user.email == get(/databases/$(database)/documents/USERS/$(request.auth.uid)).data.email
+       && resource == null;
+       
+        allow update: if false && resource == null;
+       }   
+     }
+   }
+  }

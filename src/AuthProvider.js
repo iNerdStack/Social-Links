@@ -1,39 +1,23 @@
 import React, { createContext, useState, useContext } from "react";
 import * as firebase from "firebase";
 import "firebase/firestore";
-import { GlobalContext } from "./GlobalProvider";
 
 export const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const { storeUsername, clearUsername } = useContext(GlobalContext);
+  const [username, setUsername] = useState("");
 
   return (
     <AuthContext.Provider
       value={{
         user,
         setUser,
+        username,
+        setUsername,
         login: async (email, password) => {
           try {
-            await firebase
-              .auth()
-              .signInWithEmailAndPassword(email, password)
-              .then(async () => {
-                const query = await firebase
-                  .firestore()
-                  .collection("USERS")
-                  .where("email", "==", email.toLowerCase())
-                  .get();
-
-                if (!query.empty) {
-                  const snapshot = query.docs[0];
-                  const data = snapshot.data();
-                  storeUsername(snapshot.data().username);
-                } else {
-                  // not found
-                }
-              });
+            await firebase.auth().signInWithEmailAndPassword(email, password);
 
             return { type: "success", message: "Login Successfully" };
           } catch (error) {
@@ -46,22 +30,44 @@ export const AuthProvider = ({ children }) => {
               .auth()
               .createUserWithEmailAndPassword(email, password);
 
-            //Create user info collection
-            await firebase.firestore().collection("USERS").add({
+            //Create user info collection & register username
+            let batch = firebase.firestore().batch();
+            let createUser = firebase
+              .firestore()
+              .collection("USERS")
+              .doc(firebase.auth().currentUser.uid);
+
+            batch.set(createUser, {
               userid: firebase.auth().currentUser.uid,
-              username: username,
+              username: username.toLowerCase(),
               email: email.toLowerCase(),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             });
-            storeUsername(username);
+
+            let createUsername = firebase
+              .firestore()
+              .collection("USERNAMES")
+              .doc(username.toLowerCase());
+
+            batch.set(createUsername, {
+              username: username.toLowerCase(),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+
+            await batch.commit();
+            setUsername(username.toLowerCase());
             return { type: "success", message: "Signup Successfully" };
           } catch (error) {
-            return { type: "failed", message: error.message };
+            return {
+              type: "failed",
+              message: error.message ? error.message : error,
+            };
           }
         },
         logout: async () => {
           try {
             await firebase.auth().signOut();
-            clearUsername();
+            setUsername("");
             return { type: "success", message: "Logged Out Successfully" };
           } catch (error) {
             return { type: "failed", message: "error" };

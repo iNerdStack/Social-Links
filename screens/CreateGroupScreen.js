@@ -26,50 +26,30 @@ const BackIcon = (props) => <Icon {...props} name="arrow-back-outline" />;
 
 export default function CreateGroupScreen({ navigation }) {
   const [roomName, setRoomName] = useState("");
-  const { getUsername, showToast } = useContext(GlobalContext);
-  const [username, setUsername] = useState(null);
+  const { showAlert } = useContext(GlobalContext);
+
   const [isloading, setIsloading] = useState(false);
-  const { user } = useContext(AuthContext);
-
-  const LoadingIndicator = (props) => (
-    <View style={[props.style, styles.indicator]}>
-      <Spinner size="small" status="info" />
-    </View>
-  );
-  useEffect(() => {
-    async function userName() {
-      const getuser = await getUsername();
-      setUsername(getuser);
-    }
-
-    userName();
-  }, []);
+  const { user, username } = useContext(AuthContext);
 
   async function handleButtonPress() {
-    if (roomName.length > 0) {
+    if (roomName.length >= 3) {
       setIsloading(true);
       await firebase
         .firestore()
-        .collection("THREADS")
+        .collection("GROUPS")
         .add({
           name: roomName,
-          latestMessage: {
-            text: `${username} created the group ${roomName}.`,
-            createdAt: new Date().getTime(),
-          },
+          createdBy: username,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          latestMessage: [],
         })
-        .then((docRef) => {
-          docRef.collection("MESSAGES").add({
-            text: `${username} created the group ${roomName}.`,
-            createdAt: new Date().getTime(),
-            system: true,
-          });
+        .then(() => {
           setIsloading(false);
-          showToast("Group created successfully");
+          showAlert("Group created successfully");
           navigation.navigate("Home");
         });
     } else {
-      showToast("Enter a group name");
+      showAlert("Group name must be more than 3 characters");
     }
   }
 
@@ -81,6 +61,13 @@ export default function CreateGroupScreen({ navigation }) {
           backgroundColor: "transparent",
         }}
       >
+        <Button
+          accessoryLeft={BackIcon}
+          appearance="ghost"
+          status="info"
+          style={{ paddingLeft: 15, height: 50, width: 50 }}
+          onPress={() => navigation.goBack()}
+        />
         <Layout
           style={{
             flex: 1,
@@ -104,17 +91,17 @@ export default function CreateGroupScreen({ navigation }) {
           </Layout>
           <Layout>
             <Layout style={{ flexDirection: "column", marginVertical: 15 }}>
-              <Text category="h6">Create Group</Text>
+              <Text category="h6">Group Name</Text>
               <View style={styles.inputContainer}>
                 <TextInput
                   style={styles.input}
-                  onChangeText={(text) => setRoomName(text)}
+                  value={roomName}
+                  onChangeText={(text) => {
+                    if (text.length <= 25) {
+                      setRoomName(text);
+                    }
+                  }}
                 />
-                {/* <Icon
-                  style={styles.icon}
-                  name="person-outline"
-                  fill="#000000"
-                /> */}
               </View>
             </Layout>
 
@@ -151,11 +138,6 @@ export default function CreateGroupScreen({ navigation }) {
   );
 }
 const styles = StyleSheet.create({
-  indicator: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
   container: {
     flex: 1,
   },

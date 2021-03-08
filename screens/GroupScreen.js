@@ -19,9 +19,10 @@ import {
 import { ActivityIndicator, View, StyleSheet, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthContext } from "../src/AuthProvider";
-import { GlobalContext } from "../src/GlobalProvider";
 import * as firebase from "firebase";
+import { GlobalContext } from "../src/GlobalProvider";
 import "firebase/firestore";
+import Loading from "../components/Loading";
 
 const BackIcon = (props) => <Icon {...props} name="arrow-back-outline" />;
 const CallIcon = (props) => <Icon {...props} name="phone-outline" />;
@@ -29,31 +30,137 @@ const CallIcon = (props) => <Icon {...props} name="phone-outline" />;
 const { isSameUser, isSameDay } = utils;
 
 export default function GroupScreen({ route, navigation }) {
-  const { thread } = route.params;
-  const { user } = useContext(AuthContext);
-  const { getUsername } = useContext(GlobalContext);
+  const { group } = route.params;
+  const [loading, setLoading] = useState(true);
+  const { user, username } = useContext(AuthContext);
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [isMessageLimitReached, setisMessageLimitReached] = useState(false);
+  const [LoadedAllMessages, setLoadedAllMessages] = useState(false);
+  const [LastVisible, setLastVisible] = useState({});
+  const [createdgroupMessage, setcreatedgroupMessage] = useState(null);
+  const { ChatLimit } = useContext(GlobalContext);
   const currentUser = user.toJSON();
-  const [username, setUsername] = useState(null);
 
-  useEffect(() => {
-    const messagesListener = firebase
+  function onLoadEarlier() {
+    setIsLoadingEarlier(true);
+
+    firebase
       .firestore()
-      .collection("THREADS")
-      .doc(thread._id)
+      .collection("GROUPS")
+      .doc(group._id)
       .collection("MESSAGES")
       .orderBy("createdAt", "desc")
-      .onSnapshot((querySnapshot) => {
-        const messages = querySnapshot.docs.map((doc) => {
-          const firebaseData = doc.data();
+      .startAfter(LastVisible.createdAt)
+      .limit(ChatLimit)
+      .get()
+      .then((docRef) => {
+        //update last messages with older document
+        if (docRef.docs.length >= 1) {
+          setLastVisible(docRef.docs[docRef.docs.length - 1].data());
+        }
+        //hide load more messages if all messages loaded
 
+        const oldermessages = docRef.docs.map((doc) => {
+          const firebaseData = doc.data();
           const data = {
             _id: doc.id,
-            text: "",
-            createdAt: new Date().getTime(),
             ...firebaseData,
           };
 
           if (!firebaseData.system) {
+            try {
+              data.createdAt = firebaseData.createdAt.toDate().getTime();
+            } catch (ex) {
+              // console.log(ex);
+            }
+
+            data.user = {
+              ...firebaseData.user,
+              name: firebaseData.user.email,
+            };
+          }
+
+          return data;
+        });
+
+        if (docRef.docs.length < ChatLimit) {
+          setLoadedAllMessages(true);
+          setisMessageLimitReached(true);
+
+          if (!createdgroupMessage) {
+            firebase
+              .firestore()
+              .collection("GROUPS")
+              .doc(group._id)
+              .get()
+              .then((docRef) => {
+                //Display system message showing who created the group
+
+                let groupMessage = {
+                  _id: 0,
+                  text: `${docRef.data().createdBy} created the group ${
+                    docRef.data().name
+                  }`,
+                  createdAt: docRef.data().createdAt.toDate().getTime(),
+                  system: true,
+                  user: {
+                    _id: "12345678",
+                    email: "admin@admin.com",
+                    name: "Admin",
+                    username: "Admin",
+                  },
+                };
+                setcreatedgroupMessage(groupMessage);
+                oldermessages.push(groupMessage);
+                setMessages(messages.concat(oldermessages));
+              })
+              .catch((error) => {});
+          } else {
+            oldermessages.push(createdgroupMessage);
+            setMessages(messages.concat(oldermessages));
+          }
+        } else {
+          setMessages(messages.concat(oldermessages));
+        }
+
+        setIsLoadingEarlier(false);
+      });
+  }
+
+  useEffect(() => {
+    const messagesListener = firebase
+      .firestore()
+      .collection("GROUPS")
+      .doc(group._id)
+      .collection("MESSAGES")
+      .orderBy("createdAt", "desc")
+      .limit(ChatLimit)
+      .onSnapshot((querySnapshot) => {
+        if (querySnapshot.docs.length >= 1) {
+          setLastVisible(
+            querySnapshot.docs[querySnapshot.docs.length - 1].data()
+          );
+        }
+
+        if (querySnapshot.docs.length === ChatLimit && !isMessageLimitReached) {
+          setLoadedAllMessages(false);
+        }
+
+        const loadmessages = querySnapshot.docs.map((doc) => {
+          const firebaseData = doc.data();
+
+          const data = {
+            _id: doc.id,
+            ...firebaseData,
+          };
+
+          if (!firebaseData.system) {
+            try {
+              data.createdAt = firebaseData.createdAt.toDate().getTime();
+            } catch (ex) {
+              // console.log(ex);
+            }
+
             data.user = {
               ...firebaseData.user,
               name: firebaseData.user.username,
@@ -64,14 +171,55 @@ export default function GroupScreen({ route, navigation }) {
           return data;
         });
 
-        setMessages(messages);
+        //show created group details only when the recent messages are new
+        if (querySnapshot.docs.length < ChatLimit) {
+          setLoadedAllMessages(true);
+
+          if (!createdgroupMessage) {
+            firebase
+              .firestore()
+              .collection("GROUPS")
+              .doc(group._id)
+              .get()
+              .then((docRef) => {
+                //Display system message showing who created the group
+
+                let groupMessage = {
+                  _id: 0,
+                  text: `${docRef.data().createdBy} created the group ${
+                    docRef.data().name
+                  }`,
+                  createdAt: docRef.data().createdAt.toDate().getTime(),
+                  system: true,
+                  user: {
+                    _id: "12345678",
+                    email: "admin@admin.com",
+                    name: "Admin",
+                    username: "Admin",
+                  },
+                };
+                setcreatedgroupMessage(groupMessage);
+                loadmessages.push(groupMessage);
+                setMessages(loadmessages);
+              })
+              .catch((error) => {});
+          } else {
+            loadmessages.push(createdgroupMessage);
+            setMessages(loadmessages);
+          }
+        } else {
+          setMessages(loadmessages);
+        }
+
+        if (loading) {
+          setLoading(false);
+        }
       });
 
     return () => messagesListener();
   }, []);
 
   function renderLoading() {
-    userName();
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#6646ee" />
@@ -79,62 +227,70 @@ export default function GroupScreen({ route, navigation }) {
     );
   }
 
-  const userName = async () => {
-    const getuser = await getUsername();
-    setUsername(getuser);
-  };
-
   async function handleSend(messages) {
     const text = messages[0].text;
 
-    await firebase
-      .firestore()
-      .collection("THREADS")
-      .doc(thread._id)
-      .collection("MESSAGES")
-      .add({
-        text,
-        createdAt: new Date().getTime(),
-        user: {
-          _id: currentUser.uid,
-          username: username,
-          email: currentUser.email,
-        },
-      });
+    let messageid = currentUser.uid + new Date().getTime();
 
-    await firebase
+    let latestMessageText = text;
+    if (text.length > 35) {
+      latestMessageText = text.slice(0, 35);
+    }
+
+    let batch = firebase.firestore().batch();
+    let queryLastMessage = firebase
       .firestore()
-      .collection("THREADS")
-      .doc(thread._id)
-      .set(
-        {
-          latestMessage: {
-            text,
-            createdAt: new Date().getTime(),
-            user: username,
-          },
+      .collection("GROUPS")
+      .doc(group._id);
+
+    batch.set(
+      queryLastMessage,
+      {
+        latestMessage: {
+          id: messageid,
+          text: latestMessageText,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          username,
         },
-        { merge: true }
-      );
+      },
+      { merge: true }
+    );
+
+    let queryMessage = firebase
+      .firestore()
+      .collection("GROUPS")
+      .doc(group._id)
+      .collection("MESSAGES")
+      .doc(messageid);
+
+    batch.set(queryMessage, {
+      text,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      user: {
+        _id: currentUser.uid,
+        username,
+        email: currentUser.email,
+      },
+    });
+
+    batch
+      .commit()
+      .then(() => {
+        // console.log("Success");
+      })
+      .catch((error) => {
+        // console.log(error);
+      });
   }
 
   const [messages, setMessages] = useState([
-    /**
-     * Mock message data
-     */
-    // example of system message
     {
       _id: 0,
-      text: "New room created.",
+      text: "Loading Chats..",
       createdAt: new Date().getTime(),
       system: true,
     },
   ]);
-
-  // helper method that is sends a message
-  //   function handleSend(newMessage = []) {
-  //     setMessages(GiftedChat.append(messages, newMessage));
-  //   }
 
   function renderBubble(props) {
     if (
@@ -146,7 +302,6 @@ export default function GroupScreen({ route, navigation }) {
           {...props}
           wrapperStyle={{
             right: {
-              // Here is the color change
               backgroundColor: "#6646ee",
             },
           }}
@@ -175,7 +330,6 @@ export default function GroupScreen({ route, navigation }) {
           {...props}
           wrapperStyle={{
             right: {
-              // Here is the color change
               backgroundColor: "#6646ee",
             },
           }}
@@ -214,6 +368,10 @@ export default function GroupScreen({ route, navigation }) {
     );
   }
 
+  if (loading) {
+    return <Loading />;
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
       <Layout style={styles.headerContainer}>
@@ -225,7 +383,7 @@ export default function GroupScreen({ route, navigation }) {
           onPress={() => navigation.goBack()}
         />
         <Text category="h5" style={{ marginTop: 4 }}>
-          {thread.name}
+          {group.name}
         </Text>
         <Button
           accessoryLeft={CallIcon}
@@ -247,6 +405,9 @@ export default function GroupScreen({ route, navigation }) {
         renderSend={renderSend}
         renderSystemMessage={renderSystemMessage}
         renderLoading={renderLoading}
+        loadEarlier={!LoadedAllMessages}
+        onLoadEarlier={onLoadEarlier}
+        isLoadingEarlier={isLoadingEarlier}
       />
     </SafeAreaView>
   );

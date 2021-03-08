@@ -16,64 +16,92 @@ import {
   Card,
   Avatar,
 } from "@ui-kitten/components";
-import { ActivityIndicator, View, StyleSheet, Image } from "react-native";
+import {
+  ActivityIndicator,
+  View,
+  StyleSheet,
+  Image,
+  Clipboard,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthContext } from "../src/AuthProvider";
 import { GlobalContext } from "../src/GlobalProvider";
 import * as firebase from "firebase";
 import "firebase/firestore";
+import Loading from "../components/Loading";
+import ProfileAvatar from "../components/Avatar";
 
 const CallIcon = (props) => <Icon {...props} name="phone-outline" />;
 const BackIcon = (props) => <Icon {...props} name="arrow-back-outline" />;
 
 export default function ChatScreen({ route, navigation }) {
   const { userinfo } = route.params;
-  const { user } = useContext(AuthContext);
-  const { getUsername } = useContext(GlobalContext);
-  const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(true);
+  const { user, username } = useContext(AuthContext);
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [isMessageLimitReached, setisMessageLimitReached] = useState(false);
+  const [LoadedAllMessages, setLoadedAllMessages] = useState(false);
+  const [LastVisible, setLastVisible] = useState({});
+  const { storeLastChatMessages, ChatLimit, updateHelper } = useContext(
+    GlobalContext
+  );
+  const updateChatMessages = updateHelper();
+  const [messages, setMessages] = useState([
+    {
+      _id: 0,
+      text: "Start a conversation",
+      createdAt: new Date().getTime(),
+      system: true,
+    },
+  ]);
+
   let currentUser = "none";
   try {
     currentUser = user.toJSON();
   } catch (error) {}
 
-  useEffect(() => {
-    async function userName() {
-      const getuser = await getUsername();
-      setUsername(getuser.toString());
-    }
-    userName();
-    return () => userName();
-  }, []);
+  let messagedocid =
+    currentUser.uid < userinfo.userid
+      ? currentUser.uid + userinfo.userid
+      : userinfo.userid + currentUser.uid;
 
-  useEffect(() => {
-    let messageid = "";
-    if (!userinfo.recent) {
-      messageid =
-        currentUser.uid < userinfo.userid
-          ? currentUser.uid + "_" + userinfo.userid
-          : userinfo.userid + "_" + currentUser.uid;
-    } else {
-      messageid = userinfo.userid;
-    }
+  function onLoadEarlier() {
+    setIsLoadingEarlier(true);
 
-    const messagesListener = firebase
+    firebase
       .firestore()
       .collection("CHATS")
-      .doc(messageid)
+      .doc(messagedocid)
       .collection("MESSAGES")
       .orderBy("createdAt", "desc")
-      .onSnapshot((querySnapshot) => {
-        const messages = querySnapshot.docs.map((doc) => {
-          const firebaseData = doc.data();
+      .startAfter(LastVisible.createdAt)
+      .limit(ChatLimit)
+      .get()
+      .then((docRef) => {
+        //update last messages with older document
+        if (docRef.docs.length >= 1) {
+          setLastVisible(docRef.docs[docRef.docs.length - 1].data());
+        }
+        //hide load more messages if all messages loaded
+        if (docRef.docs.length < ChatLimit) {
+          setLoadedAllMessages(true);
+          setisMessageLimitReached(true);
+        }
 
+        const oldermessages = docRef.docs.map((doc) => {
+          const firebaseData = doc.data();
           const data = {
             _id: doc.id,
-            text: "",
-            createdAt: new Date().getTime(),
             ...firebaseData,
           };
 
           if (!firebaseData.system) {
+            try {
+              data.createdAt = firebaseData.createdAt.toDate().getTime();
+            } catch (ex) {
+              // console.log(ex);
+            }
+
             data.user = {
               ...firebaseData.user,
               name: firebaseData.user.email,
@@ -83,11 +111,82 @@ export default function ChatScreen({ route, navigation }) {
           return data;
         });
 
-        setMessages(messages);
+        setMessages(messages.concat(oldermessages));
+        setIsLoadingEarlier(false);
+      });
+  }
+
+  useEffect(() => {
+    const messagesListener = firebase
+      .firestore()
+      .collection("CHATS")
+      .doc(messagedocid)
+      .collection("MESSAGES")
+      .orderBy("createdAt", "desc")
+      .limit(ChatLimit)
+      .onSnapshot((querySnapshot) => {
+        if (querySnapshot.docs.length >= 1) {
+          setLastVisible(
+            querySnapshot.docs[querySnapshot.docs.length - 1].data()
+          );
+        }
+
+        if (querySnapshot.docs.length < ChatLimit) {
+          setLoadedAllMessages(true);
+        }
+        if (querySnapshot.docs.length === ChatLimit && !isMessageLimitReached) {
+          setLoadedAllMessages(false);
+        }
+
+        const loadmessages = querySnapshot.docs.map((doc) => {
+          const firebaseData = doc.data();
+
+          const data = {
+            _id: doc.id,
+            ...firebaseData,
+          };
+
+          if (!firebaseData.system) {
+            try {
+              data.createdAt = firebaseData.createdAt.toDate().getTime();
+            } catch (ex) {
+              // console.log(ex);
+            }
+
+            data.user = {
+              ...firebaseData.user,
+              name: firebaseData.user.email,
+            };
+          }
+
+          return data;
+        });
+
+        setMessages(loadmessages);
+
+        if (loading) {
+          setLoading(false);
+        }
       });
 
     return () => messagesListener();
   }, []);
+
+  useEffect(() => {
+    async function updateLastMessage() {
+      let lastMessage = {
+        docid: messagedocid,
+        id: messages[0]._id,
+        text: messages[0].text,
+        createdAt: messages[0].createdAt,
+      };
+
+      if (!messages[0].system) {
+        await storeLastChatMessages(lastMessage);
+      }
+    }
+    updateLastMessage();
+  }, [messages]);
 
   function renderLoading() {
     return (
@@ -99,78 +198,108 @@ export default function ChatScreen({ route, navigation }) {
 
   async function handleSend(messages) {
     const text = messages[0].text;
-    //Logic
-    //var chatID = 'chat_'+(user1<user2 ? user1+'_'+user2 : user2+'_'+user1);
 
-    let messageid = "";
-    if (!userinfo.recent) {
-      messageid =
-        currentUser.uid < userinfo.userid
-          ? currentUser.uid + "_" + userinfo.userid
-          : userinfo.userid + "_" + currentUser.uid;
-    } else {
-      messageid = userinfo.userid;
+    let messagedocid = "";
+    let messageid = currentUser.uid + new Date().getTime();
+
+    messagedocid =
+      currentUser.uid < userinfo.userid
+        ? currentUser.uid + userinfo.userid
+        : userinfo.userid + currentUser.uid;
+
+    let participants =
+      currentUser.uid < userinfo.userid
+        ? [currentUser.uid, userinfo.userid]
+        : [userinfo.userid, currentUser.uid];
+
+    let latestMessageText = text;
+    if (text.length > 35) {
+      latestMessageText = text.slice(0, 35);
     }
 
-    await firebase
+    let batch = firebase.firestore().batch();
+    let queryLastMessage = firebase
       .firestore()
       .collection("CHATS")
-      .doc(messageid)
-      .collection("MESSAGES")
-      .add({
-        text,
-        createdAt: new Date().getTime(),
-        user: {
-          _id: currentUser.uid,
-          email: currentUser.email,
-        },
-      });
+      .doc(messagedocid);
 
-    await firebase
+    batch.set(
+      queryLastMessage,
+      {
+        participants: participants,
+        latestMessage: {
+          id: messageid,
+          users: [username, userinfo.username],
+          text: latestMessageText,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        },
+      },
+      { merge: true }
+    );
+
+    let queryMessage = firebase
       .firestore()
       .collection("CHATS")
-      .doc(messageid)
-      .set(
-        {
-          latestMessage: {
-            id: messageid,
-            sender: username,
-            receiver: userinfo.username,
-            text,
-            createdAt: new Date().getTime(),
-          },
-        },
-        { merge: true }
-      );
+      .doc(messagedocid)
+      .collection("MESSAGES")
+      .doc(messageid);
+
+    batch.set(queryMessage, {
+      text,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      user: {
+        _id: currentUser.uid,
+        username,
+      },
+    });
+    batch
+      .commit()
+      .then(() => {})
+      .catch((error) => {});
   }
 
-  const [messages, setMessages] = useState([
-    /**
-     * Mock message data
-     */
-    // example of system message
-    {
-      _id: 0,
-      text: "Start a conversation with" + userinfo,
-      createdAt: new Date().getTime(),
-      system: true,
-    },
-    // // example of chat message
-    // {
-    //   _id: 1,
-    //   text: "Hello!",
-    //   createdAt: new Date().getTime(),
-    //   user: {
-    //     _id: 2,
-    //     name: "Test User",
-    //   },
-    // },
-  ]);
+  async function deleteMessage(message) {
+    let batch = firebase.firestore().batch();
+    let queryupdatelastMessage = firebase
+      .firestore()
+      .collection("CHATS")
+      .doc(messagedocid);
 
-  // helper method that is sends a message
-  //   function handleSend(newMessage = []) {
-  //     setMessages(GiftedChat.append(messages, newMessage));
-  //   }
+    batch.set(
+      queryupdatelastMessage,
+      {
+        latestMessage: {
+          id: "deleted_message",
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        },
+      },
+      { merge: true }
+    );
+
+    batch
+      .commit()
+      .then(async () => {
+        let m = messages;
+        let MessageIndex = m.map((item) => item._id).indexOf(message._id);
+
+        //update chat list when older messages are deleted
+        if (MessageIndex > ChatLimit - 1) {
+          m.splice(MessageIndex, 1);
+
+          setMessages(m);
+          updateChatMessages();
+        } else if (MessageIndex === 0) {
+          let lastMessage = {
+            docid: messagedocid,
+            id: "deleted_message",
+            text: m[1].text,
+            createdAt: m[1].createdAt,
+          };
+          let store = await storeLastChatMessages(lastMessage);
+        }
+      })
+      .catch((error) => {});
+  }
 
   function renderBubble(props) {
     return (
@@ -202,20 +331,6 @@ export default function ChatScreen({ route, navigation }) {
     );
   }
 
-  const customtInputToolbar = (props) => {
-    return (
-      <InputToolbar
-        {...props}
-        containerStyle={{
-          backgroundColor: "white",
-          borderTopColor: "#E8E8E8",
-          borderTopWidth: 1,
-          padding: 8,
-        }}
-      />
-    );
-  };
-
   function renderSend(props) {
     return (
       <Send {...props}>
@@ -229,6 +344,35 @@ export default function ChatScreen({ route, navigation }) {
         </View>
       </Send>
     );
+  }
+
+  function onLongPress(context, message) {
+    const options = ["Copy Text", "Delete", "Cancel"];
+    const cancelButtonIndex = options.length - 1;
+    const destructiveButtonIndex = options.length - 2;
+    context.actionSheet().showActionSheetWithOptions(
+      {
+        options,
+        destructiveButtonIndex,
+        cancelButtonIndex,
+      },
+      (buttonIndex) => {
+        switch (buttonIndex) {
+          case 0:
+            Clipboard.setString(message.text);
+            break;
+          case 1:
+            {
+              deleteMessage(message);
+            }
+            break;
+        }
+      }
+    );
+  }
+
+  if (loading) {
+    return <Loading />;
   }
 
   return (
@@ -249,13 +393,11 @@ export default function ChatScreen({ route, navigation }) {
               justifyContent: "center",
             }}
           >
-            <Avatar
-              size="large"
-              source={require("../assets/img/default.png")}
-            />
+            <ProfileAvatar name={userinfo.username} />
           </Layout>
-          <Text category="s1" style={{ paddingTop: 10 }}>
-            {userinfo.username}
+          <Text category="s1" style={{ paddingTop: 10, color: "grey" }}>
+            {userinfo.username.charAt(0).toUpperCase() +
+              userinfo.username.slice(1)}
           </Text>
         </Layout>
 
@@ -270,6 +412,7 @@ export default function ChatScreen({ route, navigation }) {
       <GiftedChat
         messages={messages}
         alignTop="true"
+        renderAvatar={null}
         onSend={handleSend}
         user={{ _id: currentUser.uid }}
         renderBubble={renderBubble}
@@ -279,6 +422,10 @@ export default function ChatScreen({ route, navigation }) {
         renderSend={renderSend}
         renderSystemMessage={renderSystemMessage}
         renderLoading={renderLoading}
+        loadEarlier={!LoadedAllMessages}
+        onLoadEarlier={onLoadEarlier}
+        onLongPress={onLongPress}
+        isLoadingEarlier={isLoadingEarlier}
       />
     </SafeAreaView>
   );
@@ -296,6 +443,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   headerContainer: {
+    marginTop: 25,
     margin: 15,
     height: 65,
     justifyContent: "space-between",

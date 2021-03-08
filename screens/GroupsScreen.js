@@ -3,80 +3,108 @@ import {
   View,
   StyleSheet,
   FlatList,
-  ImageBackground,
   Image,
   TouchableWithoutFeedback,
 } from "react-native";
-import { Layout, Icon, Text, Card, Avatar } from "@ui-kitten/components";
+import { useIsFocused } from "@react-navigation/native";
+import { Layout, Text } from "@ui-kitten/components";
 import * as firebase from "firebase";
 import "firebase/firestore";
 import Loading from "../components/Loading";
 import { GlobalContext } from "../src/GlobalProvider";
 
-export default function MenuScreen({ navigation }) {
-  const [threads, setThreads] = useState([]);
+export default function MainScreen({ navigation }) {
+  const isFocused = useIsFocused();
+  const { ListLimit } = useContext(GlobalContext);
+  const [LastVisible, setLastVisible] = useState({});
+  const [groups, setGroups] = useState([]);
+  // const [loading, setLoading] = useState(true);
   const [loading, setLoading] = useState(true);
-  const globalcontext = useContext(GlobalContext);
+  const [
+    onEndReachedCalledDuringMomentum,
+    setonEndReachedCalledDuringMomentum,
+  ] = useState(true);
 
-  useEffect(() => {
-    let allthreads = [
-      {
-        _id: 1,
-        name: "Create Group",
-        group: true,
-      },
-    ];
-
-    setThreads(allthreads);
-    const unsubscribe = firebase
+  const LoadMoreGroups = () => {
+    firebase
       .firestore()
-      .collection("THREADS")
-      // .orderBy('latestMessage.createdAt', 'desc')
-      .onSnapshot((querySnapshot) => {
-        const threadsData = querySnapshot.docs.map((documentSnapshot) => {
+      .collection("GROUPS")
+      .orderBy("createdAt", "desc")
+      .startAfter(LastVisible.createdAt)
+      .limit(ListLimit)
+      .get()
+      .then((docRef) => {
+        if (docRef.docs.length >= 1) {
+          setLastVisible(docRef.docs[docRef.docs.length - 1].data());
+
+          const moregroups = docRef.docs.map((document) => {
+            return {
+              _id: document.id,
+              name: "",
+              ...document.data(),
+            };
+          });
+
+          //Sort and check for duplicate data if re-rendering
+          let groupMap = new Set(groups.map((d) => d._id));
+          let updatedGroupList = [
+            ...groups,
+            ...moregroups.filter((d) => !groupMap.has(d._id)),
+          ];
+
+          setGroups(updatedGroupList);
+        }
+      });
+  };
+  const onEndReached = () => {
+    if (!onEndReachedCalledDuringMomentum) {
+      //Load More Groups
+      LoadMoreGroups();
+      setonEndReachedCalledDuringMomentum(true);
+    }
+  };
+
+  const loadGroup = () => {
+    firebase
+      .firestore()
+      .collection("GROUPS")
+      .orderBy("createdAt", "desc")
+      .limit(ListLimit)
+      .get()
+      .then((docRef) => {
+        if (docRef.docs.length >= 1) {
+          setLastVisible(docRef.docs[docRef.docs.length - 1].data());
+        }
+        const groupsData = docRef.docs.map((document) => {
           return {
-            _id: documentSnapshot.id,
-            // give defaults
+            _id: document.id,
             name: "",
-            ...documentSnapshot.data(),
+            ...document.data(),
           };
         });
 
-        allthreads = [];
-        allthreads = [
-          {
-            _id: 1,
-            name: "Create Group",
-            group: true,
-          },
+        //Sort and check for duplicate data if re-rendering
+        let mapNewGroupData = new Set(groupsData.map((d) => d._id));
+        let mergedData = [
+          ...groupsData,
+          ...groups.filter((d) => !mapNewGroupData.has(d._id)),
         ];
-
-        setThreads(allthreads);
-        allthreads = allthreads.concat(threadsData);
-        // var obj = {};
-
-        // //clear duplicates data on page re-run
-        // for (var i = 0, len = allthreads.length; i < len; i++) {
-        //   obj[allthreads[i]["_id"]] = allthreads[i];
-        // }
-
-        // allthreads = new Array();
-        // for (var key in obj) {
-        //   allthreads.push(obj[key]);
-        // }
-
-        setThreads(allthreads);
+        setGroups(mergedData);
 
         if (loading) {
           setLoading(false);
         }
       });
-
-    /**
-     * unsubscribe listener
-     */
-    return () => unsubscribe();
+  };
+  useEffect(() => {
+    return () => loadGroup();
   }, []);
+
+  useEffect(() => {
+    if (isFocused) {
+      loadGroup();
+    }
+  }, [isFocused]);
 
   if (loading) {
     return <Loading />;
@@ -87,34 +115,34 @@ export default function MenuScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <FlatList
-        data={threads}
+        data={groups}
         renderItem={({ item, index, key }) => (
           <TouchableWithoutFeedback
             key={item._id}
             onPress={() => {
-              if (item.group) {
-                navigation.navigate("CreateGroup");
-              } else {
-                navigation.navigate("Room", { thread: item });
-              }
+              navigation.navigate("Room", { group: item });
             }}
           >
             <Layout style={styles.GridViewContainer} level="1">
               <Image
                 style={styles.imageThumbnail}
-                source={
-                  index === 0
-                    ? require("../assets/img/create-group.jpg")
-                    : require("../assets/img/group.png")
-                }
+                source={require("../assets/img/group.png")}
               />
-              <Text style={{ marginTop: 10 }}> {item.name}</Text>
+              <Text style={{ marginTop: 10, textAlign: "center" }}>
+                {item.name}
+              </Text>
             </Layout>
           </TouchableWithoutFeedback>
         )}
         //Setting the number of column
         numColumns={2}
         keyExtractor={(item, index) => index.toString()}
+        initialNumToRender={ListLimit}
+        onEndReachedThreshold={0.1}
+        onMomentumScrollBegin={() => {
+          setonEndReachedCalledDuringMomentum(false);
+        }}
+        onEndReached={onEndReached.bind(this)}
       />
     </View>
   );
@@ -159,7 +187,7 @@ const styles = StyleSheet.create({
 // import React from "react";
 // import { View, StyleSheet } from "react-native";
 // import { Layout, Text, Icon, Button } from "@ui-kitten/components";
-// const MenuScreen = ({ navigation }) => {
+// const MainScreen = ({ navigation }) => {
 //   return (
 //     <Layout style={styles.container}>
 //       {/* <Title>All chat rooms will be listed here</Title> */}
@@ -178,4 +206,4 @@ const styles = StyleSheet.create({
 //   },
 // });
 
-// export default MenuScreen;
+// export default MainScreen;

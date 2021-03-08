@@ -23,11 +23,11 @@ import { GlobalContext } from "../src/GlobalProvider";
 import { SafeAreaView } from "react-native-safe-area-context";
 const LoginIcon = (props) => <Icon {...props} name="log-in-outline" />;
 
-export default function SignupScreen({ navigation }) {
+export default function LoginScreen({ navigation }) {
   const { login } = useContext(AuthContext);
   const [email, setEmail] = useState();
   const [password, setPassword] = useState();
-  const { showToast } = useContext(GlobalContext);
+  const { showAlert } = useContext(GlobalContext);
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [isloading, setIsloading] = useState(false);
 
@@ -46,14 +46,14 @@ export default function SignupScreen({ navigation }) {
     const loginResponse = await login(email, password);
 
     if (loginResponse.type === "success") {
-      showToast(loginResponse.message);
+      showAlert(loginResponse.message);
       setIsloading(false);
       setTimeout(() => {
-        navigation.replace("MainHome");
+        navigation.replace("Home");
       }, 1000);
     } else {
       setIsloading(false);
-      showToast(JSON.stringify(loginResponse.message));
+      showAlert(JSON.stringify(loginResponse.message));
     }
   };
 

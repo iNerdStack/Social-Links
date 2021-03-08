@@ -12,7 +12,7 @@ const SettingsIcon = (props) => (
 
 const MenuIcon = (props) => <Icon {...props} name="menu-outline" />;
 
-const LoginScreen = ({ navigation }) => (
+const WelcomeScreen = ({ navigation }) => (
   <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
     <Layout
       style={{
@@ -124,4 +124,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LoginScreen;
+export default WelcomeScreen;

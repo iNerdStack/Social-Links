@@ -10,6 +10,6 @@ npm-debug.*
 *.orig.*
 web-build/
 .vscode
-
+src/firebaseSvc.js
 # macOS
 .DS_Store
