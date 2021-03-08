@@ -205,6 +205,9 @@ service cloud.firestore {
        && resource == null;
        
         allow update: if false && resource == null;
+                
+       allow delete: if userIsAuthenticated()
+       && request.auth.uid == resource.data.user._id
        }   
      }
    }

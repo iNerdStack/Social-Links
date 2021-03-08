@@ -16,7 +16,13 @@ import {
   Card,
   Avatar,
 } from "@ui-kitten/components";
-import { ActivityIndicator, View, StyleSheet, Image } from "react-native";
+import {
+  ActivityIndicator,
+  View,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthContext } from "../src/AuthProvider";
 import * as firebase from "firebase";
@@ -38,7 +44,18 @@ export default function GroupScreen({ route, navigation }) {
   const [LoadedAllMessages, setLoadedAllMessages] = useState(false);
   const [LastVisible, setLastVisible] = useState({});
   const [createdgroupMessage, setcreatedgroupMessage] = useState(null);
-  const { ChatLimit } = useContext(GlobalContext);
+  const { ChatLimit, updateHelper } = useContext(GlobalContext);
+  const updateChatMessages = updateHelper();
+
+  const [messages, setMessages] = useState([
+    {
+      _id: 0,
+      text: "Loading Chats..",
+      createdAt: new Date().getTime(),
+      system: true,
+    },
+  ]);
+
   const currentUser = user.toJSON();
 
   function onLoadEarlier() {
@@ -283,14 +300,27 @@ export default function GroupScreen({ route, navigation }) {
       });
   }
 
-  const [messages, setMessages] = useState([
-    {
-      _id: 0,
-      text: "Loading Chats..",
-      createdAt: new Date().getTime(),
-      system: true,
-    },
-  ]);
+  async function deleteMessage(message) {
+    await firebase
+      .firestore()
+      .collection("GROUPS")
+      .doc(group._id)
+      .collection("MESSAGES")
+      .doc(message._id)
+      .delete()
+      .then(() => {
+        setLoading(true);
+        let m = messages;
+        let MessageIndex = m.map((item) => item._id).indexOf(message._id);
+
+        // //update chat list when older messages are deleted
+        if (MessageIndex > ChatLimit - 1) {
+          m.splice(MessageIndex, 1);
+          setLoading(false);
+          updateChatMessages();
+        }
+      });
+  }
 
   function renderBubble(props) {
     if (
@@ -343,6 +373,20 @@ export default function GroupScreen({ route, navigation }) {
     );
   }
 
+  function renderscrollToBottomComponent(props) {
+    return (
+      <View style={styles.scrollToBottomContainer}>
+        <TouchableOpacity {...props}>
+          <Icon
+            name="arrowhead-down-outline"
+            style={{ width: 22, height: 22 }}
+            fill="black"
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   function renderSystemMessage(props) {
     return (
       <SystemMessage
@@ -366,6 +410,49 @@ export default function GroupScreen({ route, navigation }) {
         </View>
       </Send>
     );
+  }
+
+  function onLongPress(context, message) {
+    if (message.user._id === currentUser.uid) {
+      const options = ["Copy Text", "Delete", "Cancel"];
+      const cancelButtonIndex = options.length - 1;
+      const destructiveButtonIndex = options.length - 2;
+      context.actionSheet().showActionSheetWithOptions(
+        {
+          options,
+          destructiveButtonIndex,
+          cancelButtonIndex,
+        },
+        (buttonIndex) => {
+          switch (buttonIndex) {
+            case 0:
+              Clipboard.setString(message.text);
+              break;
+            case 1:
+              {
+                deleteMessage(message);
+              }
+              break;
+          }
+        }
+      );
+    } else {
+      const options = ["Copy Text", "Cancel"];
+      const cancelButtonIndex = options.length - 1;
+      context.actionSheet().showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+        },
+        (buttonIndex) => {
+          switch (buttonIndex) {
+            case 0:
+              Clipboard.setString(message.text);
+              break;
+          }
+        }
+      );
+    }
   }
 
   if (loading) {
@@ -401,10 +488,12 @@ export default function GroupScreen({ route, navigation }) {
         renderBubble={renderBubble}
         alwaysShowSend
         scrollToBottom
+        scrollToBottomComponent={renderscrollToBottomComponent}
         alignTop={true}
         renderSend={renderSend}
         renderSystemMessage={renderSystemMessage}
         renderLoading={renderLoading}
+        onLongPress={onLongPress}
         loadEarlier={!LoadedAllMessages}
         onLoadEarlier={onLoadEarlier}
         isLoadingEarlier={isLoadingEarlier}
@@ -452,5 +541,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     paddingLeft: 6,
     marginBottom: 4,
+  },
+  scrollToBottomContainer: {
+    height: 40,
+    width: 40,
+    backgroundColor: "white",
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

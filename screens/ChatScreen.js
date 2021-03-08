@@ -4,24 +4,15 @@ import {
   Bubble,
   Send,
   SystemMessage,
-  InputToolbar,
 } from "react-native-gifted-chat";
-import {
-  ListItem,
-  Divider,
-  Layout,
-  Icon,
-  Text,
-  Button,
-  Card,
-  Avatar,
-} from "@ui-kitten/components";
+import { Divider, Layout, Icon, Text, Button } from "@ui-kitten/components";
 import {
   ActivityIndicator,
   View,
   StyleSheet,
   Image,
   Clipboard,
+  TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AuthContext } from "../src/AuthProvider";
@@ -276,6 +267,15 @@ export default function ChatScreen({ route, navigation }) {
       { merge: true }
     );
 
+    let queryDeleteMessage = firebase
+      .firestore()
+      .collection("CHATS")
+      .doc(messagedocid)
+      .collection("MESSAGES")
+      .doc(message._id);
+
+    batch.delete(queryDeleteMessage);
+
     batch
       .commit()
       .then(async () => {
@@ -298,7 +298,9 @@ export default function ChatScreen({ route, navigation }) {
           let store = await storeLastChatMessages(lastMessage);
         }
       })
-      .catch((error) => {});
+      .catch((error) => {
+        console.log(error);
+      });
   }
 
   function renderBubble(props) {
@@ -346,29 +348,60 @@ export default function ChatScreen({ route, navigation }) {
     );
   }
 
-  function onLongPress(context, message) {
-    const options = ["Copy Text", "Delete", "Cancel"];
-    const cancelButtonIndex = options.length - 1;
-    const destructiveButtonIndex = options.length - 2;
-    context.actionSheet().showActionSheetWithOptions(
-      {
-        options,
-        destructiveButtonIndex,
-        cancelButtonIndex,
-      },
-      (buttonIndex) => {
-        switch (buttonIndex) {
-          case 0:
-            Clipboard.setString(message.text);
-            break;
-          case 1:
-            {
-              deleteMessage(message);
-            }
-            break;
-        }
-      }
+  function renderscrollToBottomComponent(props) {
+    return (
+      <View style={styles.scrollToBottomContainer}>
+        <TouchableOpacity {...props}>
+          <Icon
+            name="arrowhead-down-outline"
+            style={{ width: 22, height: 22 }}
+            fill="black"
+          />
+        </TouchableOpacity>
+      </View>
     );
+  }
+  function onLongPress(context, message) {
+    if (message.user._id === currentUser.uid) {
+      const options = ["Copy Text", "Delete", "Cancel"];
+      const cancelButtonIndex = options.length - 1;
+      const destructiveButtonIndex = options.length - 2;
+      context.actionSheet().showActionSheetWithOptions(
+        {
+          options,
+          destructiveButtonIndex,
+          cancelButtonIndex,
+        },
+        (buttonIndex) => {
+          switch (buttonIndex) {
+            case 0:
+              Clipboard.setString(message.text);
+              break;
+            case 1:
+              {
+                deleteMessage(message);
+              }
+              break;
+          }
+        }
+      );
+    } else {
+      const options = ["Copy Text", "Cancel"];
+      const cancelButtonIndex = options.length - 1;
+      context.actionSheet().showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+        },
+        (buttonIndex) => {
+          switch (buttonIndex) {
+            case 0:
+              Clipboard.setString(message.text);
+              break;
+          }
+        }
+      );
+    }
   }
 
   if (loading) {
@@ -385,7 +418,12 @@ export default function ChatScreen({ route, navigation }) {
           style={{ height: 28, width: 28 }}
           onPress={() => navigation.goBack()}
         />
-        <Layout style={{ justifyContent: "center", flexDirection: "column" }}>
+        <Layout
+          style={{
+            justifyContent: "center",
+            flexDirection: "column",
+          }}
+        >
           <Layout
             style={{
               flex: 1,
@@ -395,7 +433,10 @@ export default function ChatScreen({ route, navigation }) {
           >
             <ProfileAvatar name={userinfo.username} />
           </Layout>
-          <Text category="s1" style={{ paddingTop: 10, color: "grey" }}>
+          <Text
+            category="s1"
+            style={{ paddingTop: 10, color: "grey", textAlign: "center" }}
+          >
             {userinfo.username.charAt(0).toUpperCase() +
               userinfo.username.slice(1)}
           </Text>
@@ -411,7 +452,7 @@ export default function ChatScreen({ route, navigation }) {
       <Divider />
       <GiftedChat
         messages={messages}
-        alignTop="true"
+        alignTop={true}
         renderAvatar={null}
         onSend={handleSend}
         user={{ _id: currentUser.uid }}
@@ -419,6 +460,7 @@ export default function ChatScreen({ route, navigation }) {
         placeholder="Send a message"
         alwaysShowSend
         scrollToBottom
+        scrollToBottomComponent={renderscrollToBottomComponent}
         renderSend={renderSend}
         renderSystemMessage={renderSystemMessage}
         renderLoading={renderLoading}
@@ -470,5 +512,13 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
     height: 22,
     width: 22,
+  },
+  scrollToBottomContainer: {
+    height: 40,
+    width: 40,
+    backgroundColor: "white",
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

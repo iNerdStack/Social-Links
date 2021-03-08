@@ -67,12 +67,7 @@ export const HomeButton = ({ navigation }) => {
                 setshowAllFabs(false);
               }}
             >
-              <Icon
-                name="people-outline"
-                style={styles.icon}
-                size={30}
-                fill="white"
-              />
+              <Icon name="people-outline" style={styles.icon} fill="white" />
             </TouchableOpacity>
           </Layout>
           <Layout

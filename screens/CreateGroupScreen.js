@@ -46,7 +46,10 @@ export default function CreateGroupScreen({ navigation }) {
         .then(() => {
           setIsloading(false);
           showAlert("Group created successfully");
-          navigation.navigate("Home");
+          navigation.goBack();
+        })
+        .catch((error) => {
+          console.log(error);
         });
     } else {
       showAlert("Group name must be more than 3 characters");
