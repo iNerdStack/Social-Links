@@ -56,9 +56,6 @@ An Open Source Chat Application Built-In **React Native & Firebase** for Android
  
  > ### APP COLOR SCHEME
  - Generate your theme color at [Eva Design System](https://colors.eva.design/) and export data as JSON
- 
- - ![Generate color](https://akveo.github.io/react-native-ui-kitten/docs/assets/images/articles/guides/branding-export-theme.gif)
- 
  - Rename the JSON downloaded from `custom-theme.json` to `theme.json`
  - Replace `theme` > `theme.json` with the JSON file you generated
 
@@ -85,7 +82,7 @@ PoppinsSemiBold: require("./assets/fonts/Poppins-SemiBold.ttf"),
 });
 ```
 
-- Rename them also in `theme` > `mapping.json`
+- Rename theme also in `theme` > `mapping.json`
 
 ## License
 - MIT
