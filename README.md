@@ -47,11 +47,11 @@ An Open Source Chat Application Built-In **React Native & Firebase** for Android
  
  - `npm start`
 
-> Please Note: Delete apk & firestore rules folders in project before building app
+> Note: Delete apk & firestore rules folders in project before building app
 
 ## App Customization
 > ### APP NAME 
- - Change app name and package name from `app.json` in root folder
+ - Change app name and package name IN `app.json`
  - Replace icons in `assets` folder
  
  > ### APP COLOR SCHEME
