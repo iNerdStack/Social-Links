@@ -48,6 +48,7 @@ An Open Source Chat Application Built-In **React Native & Firebase** for Android
  
  - `npm start`
 
+> Please Note: Delete apk & firestore rules folders in project before building app
 
 ## App Customization
 > ### APP NAME 
@@ -83,6 +84,9 @@ PoppinsSemiBold: require("./assets/fonts/Poppins-SemiBold.ttf"),
 ```
 
 - Rename theme also in `theme` > `mapping.json`
+
+## App Demo
+>  A demo appication is available in `apk` folder,  download and install to try app demo
 
 ## License
 - MIT
