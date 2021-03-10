@@ -31,10 +31,9 @@ An Open Source Chat Application Built-In **React Native & Firebase** for Android
 3. Replace database security rules with content in file located at`Firestore Rules` > `social-links.rules`and publish
 4.  Add a composite index with the values below
 ![Composite Index](https://i.imgur.com/HsMctQZ.jpg)
-5. You should see this after step 4 is done  
+
 ![Database Index](https://i.imgur.com/2r9y6Mn.jpg)
 
-6. All Done
 
 ## App Setup
   
